@@ -12,6 +12,7 @@ import pathlib
 import urllib.parse
 
 import ldap3
+import ldap3.core.exceptions
 import simplifiedapp
 
 try:
@@ -79,6 +80,16 @@ class IPAUser(ldap3_.RWEntryWrapper):
 		else:
 			return True
 
+	def connect_to_directory(self, password):
+
+		LOGGER.debug('Connecting to the directory as user %s', self.uid)
+		try:
+			connection = ldap3_.Connection(self.entry_cursor.connection.server_pool, base_dn = self.entry_cursor.connection.base_dn, user = self.entry_dn, password = password, auto_bind = True, lazy = False, raise_exceptions = True)
+		except ldap3.core.exceptions.LDAPInvalidCredentialsResult:
+			raise ValueError("The password provided didn't work")
+		else:
+			LOGGER.debug('Succesfully connected to the directory as %s', self.uid)
+			return connection
 
 	def change_password(self, new_password, old_password = ''):
 		'''Change user password
@@ -88,8 +99,17 @@ class IPAUser(ldap3_.RWEntryWrapper):
 		- Documentation
 		'''
 		
-		LOGGER.debug("Changing password for %s", self.entry_dn)
-		return self.entry_cursor.connection.extend.standard.modify_password(self.entry_dn, old_password, new_password)
+		if len(old_password):
+			LOGGER.debug("Changing password for user %s", self.uid)
+			try:
+				user_connection = self.connect_to_directory(old_password)
+			except ValueError:
+				raise ValueError("The current password doesn't match")
+			else:
+				return user_connection.extend.standard.modify_password(self.entry_dn, old_password, new_password)
+		else:
+			LOGGER.debug("Resetting password for user %s", self.uid)
+			return self.entry_cursor.connection.extend.standard.modify_password(self.entry_dn, '', new_password)
 
 	def user_status(self, enable = None):
 		'''User enable/disable
