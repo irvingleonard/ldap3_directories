@@ -82,7 +82,7 @@ class EntriesCollection(dict):
 		self._object_definition = object_definition
 		self._dry_run = dry_run
 
-	def __missing__(self, name):
+	def __missing__(self, name, attributes = '*'):
 		'''Lazy retrieval of entries
 		The LDAP traffic will happen only when an entry is needed.
 		
@@ -91,7 +91,7 @@ class EntriesCollection(dict):
 		
 		dn = self._build_dn(name)
 		try:
-			entry = self._connection.get_entry_by_dn(dn)
+			entry = self._connection.get_entry_by_dn(dn, attributes = attributes)
 		except ValueError:
 			raise KeyError("Couldn't find entry {}".format(name))
 		LOGGER.debug('Got entry for %s: %s', dn, entry)

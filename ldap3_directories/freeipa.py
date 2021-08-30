@@ -95,6 +95,15 @@ class IPAUsers(ldap3_.EntriesCollection):
 		super().__init__(connection = directory._connection, parent_dn = 'cn=users,cn=accounts', identity_attribute = 'uid', entry_customizer = IPAUser, object_definition = directory.etc.user_definition, dry_run = dry_run)
 		self._directory = directory
 	
+	def __missing__(self, name):
+		'''Lazy retrieval of entries
+		Users require operational attributes too.
+		
+		ToDo: Documentation
+		'''
+
+		return super().__missing__(name, attributes = '+')
+
 	def _get_next_uid_number(self):
 		'''Get a free UID number
 		Find the next usable UID number. It will find the lowest free number that is higher than the lowest existing uidNumber. This can break in all kinds of way, mostly in heavy write parallel scenarios; use carefully.
