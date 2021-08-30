@@ -36,6 +36,9 @@ servers = ('freeipa0.example.com', 'freeipa1.example.com')	#servers could be an 
 
 base_dn = 'dc=mydir,dc=example,dc=com'	#base_dn will be the root of your directory
 
+username = 'myuser.name'
+password = 'my_very_secure_password'
+
 freeipa = ldap3_directories.freeipa.IPADirectory(servers, base_dn, username, password)
 ```
 
