@@ -102,7 +102,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		ToDo: Documentation
 		'''
 
-		return super().__missing__(name, attributes = '+')
+		return super().__missing__(name, attributes = ('*', '+'))
 
 	def _get_next_uid_number(self):
 		'''Get a free UID number
