@@ -10,6 +10,7 @@ import collections.abc
 import logging
 
 import ldap3
+import ldap3.core.exceptions
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,14 +46,18 @@ class Connection(ldap3.Connection):
 		'''
 
 		dn = self.build_dn(*dn, is_relative = is_relative)
-		result_bool = self.search(search_base = dn, search_filter = '(objectClass=*)', search_scope = ldap3.BASE, attributes = attributes)
-		if not result_bool:
-			raise RuntimeError('Search failed for {}'.format(dn))
-		if len(self.response) > 1:
-			raise AttributeError('The dn "{}" yield too many ({}) results'.format(dn, len(self.entries)))
-		elif not len(self.response):
-			raise AttributeError('No entry found for dn: {}'.format(dn))
-		return self.entries[0]
+		try:
+			result_bool = self.search(search_base = dn, search_filter = '(objectClass=*)', search_scope = ldap3.BASE, attributes = attributes)
+		except ldap3.core.exceptions.LDAPNoSuchObjectResult:
+			raise ValueError('No entry found for dn: {}'.format(dn))
+		else:
+			if not result_bool:
+				raise RuntimeError('Search failed for {}'.format(dn))
+			if len(self.response) > 1:
+				raise AttributeError('The dn "{}" yield too many ({}) results'.format(dn, len(self.entries)))
+			elif not len(self.response):
+				raise ValueError('No entry found for dn: {}'.format(dn))
+			return self.entries[0]
 
 
 class EntriesCollection(dict):
@@ -85,7 +90,10 @@ class EntriesCollection(dict):
 		'''
 		
 		dn = self._build_dn(name)
-		entry = self._connection.get_entry_by_dn(dn)
+		try:
+			entry = self._connection.get_entry_by_dn(dn)
+		except ValueError:
+			raise KeyError("Couldn't find entry {}".format(name))
 		LOGGER.debug('Got entry for %s: %s', dn, entry)
 		return entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)
 	
