@@ -26,9 +26,16 @@ This submodule is intended to work with the [FreeIPA](https://www.freeipa.org/pa
 
 ### Examples
 
-Instantiating an `IPADirectory`, servers could be a single server IP/DNS_name or a list of them, base_dn will be the DN pointing to the root of the directory:
+Instantiating an `IPADirectory`
 ```
 import ldap3_directories.freeipa
+
+servers = 'freeipa.example.com'	#servers could be a single server as a string
+servers = 'freeipa0.example.com freeipa1.example.com'	#servers could be a space separated list as a string
+servers = ('freeipa0.example.com', 'freeipa1.example.com')	#servers could be an iterator containing the servers as strings
+
+base_dn = 'dc=mydir,dc=example,dc=com'	#base_dn will be the root of your directory
+
 freeipa = ldap3_directories.freeipa.IPADirectory(servers, base_dn, username, password)
 ```
 
