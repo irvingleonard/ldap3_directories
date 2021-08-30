@@ -66,6 +66,20 @@ class IPAUser(ldap3_.RWEntryWrapper):
 	- Documentation
 	'''
 	
+	def __bool__(self):
+		'''Check lock status
+		Work the nsAccountLock operational attribute to find out the lock status: True = enabled; False = disabled
+		
+		ToDo:
+		- Documentation
+		'''
+
+		if hasattr(self, 'nsAccountLock') and self.nsAccountLock.value == 'True':
+			return False
+		else:
+			return True
+
+
 	def change_password(self, new_password, old_password = ''):
 		'''Change user password
 		Old password empty should work with new accounts
@@ -76,6 +90,31 @@ class IPAUser(ldap3_.RWEntryWrapper):
 		
 		LOGGER.debug("Changing password for %s", self.entry_dn)
 		return self.entry_cursor.connection.extend.standard.modify_password(self.entry_dn, old_password, new_password)
+
+	def user_status(self, enable = None):
+		'''User enable/disable
+		Enables or disables the user. With the enable flag=None (default) will return current status; enable=True will enable, enable=False will disable.
+		
+		ToDo:
+		- Documentation
+		'''
+
+		if enable is None:
+			return bool(self)
+		elif enable:
+			if self:
+				LOGGER.warning('User %s is already enabled', self.uid)
+				return True
+			else:
+				LOGGER.debug('Enabling user %s', self.uid)
+				return self.entry_cursor.connection.modify(self.entry_dn, {'nsAccountLock' : (ldap3.MODIFY_REPLACE, [False])})
+		else:
+			if self:
+				LOGGER.debug('Disabling user %s', self.uid)
+				return not self.entry_cursor.connection.modify(self.entry_dn, {'nsAccountLock' : (ldap3.MODIFY_REPLACE, [True])})
+			else:
+				LOGGER.warning('User %s is already disabled', self.uid)
+				return False
 
 
 class IPAUsers(ldap3_.EntriesCollection):
