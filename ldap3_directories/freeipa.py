@@ -240,7 +240,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		if 'mail' not in attributes:
 			attributes['mail'] = '{}@{}'.format(uid, self._directory.etc.ipaConfig.ipaDefaultEmailDomain)
 		
-		LOGGER.warning('Creating user: %s', attributes)
+		LOGGER.info('Creating user: %s', attributes)
 
 		return super().add(**attributes)
 

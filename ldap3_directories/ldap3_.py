@@ -155,7 +155,10 @@ class EntriesCollection(dict):
 		dn = self._build_dn(attributes[self._identity_attribute])
 		LOGGER.debug('Creating entry %s with: %s', dn, attributes)
 		
-		return self._connection.add(dn, self._object_definition._object_class, attributes)
+		if self._connection.add(dn, self._object_definition._object_class, attributes)
+			return self[attributes[self._identity_attribute]]
+		else:
+			raise RuntimeError('User creation failed: {}'.format(attributes))
 		
 	def update(self, other, lazy = True):
 		'''Merge mapping into the collection
