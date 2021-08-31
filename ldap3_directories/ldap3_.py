@@ -6,7 +6,6 @@ ToDo:
 - Everything
 '''
 
-import collections.abc
 import logging
 
 import ldap3
@@ -34,6 +33,9 @@ class Connection(ldap3.Connection):
 		ToDo:
 		- Documentation
 		'''
+
+		if is_relative and (self.base_dn is None):
+			raise RuntimeError('Relative DNs are not supported on this connection (base_dn is missing)')
 
 		return ','.join(components + ((self.base_dn,) if is_relative else ()))
 
@@ -155,7 +157,7 @@ class EntriesCollection(dict):
 		dn = self._build_dn(attributes[self._identity_attribute])
 		LOGGER.debug('Creating entry %s with: %s', dn, attributes)
 		
-		if self._connection.add(dn, self._object_definition._object_class, attributes)
+		if self._connection.add(dn, self._object_definition._object_class, attributes):
 			return self[attributes[self._identity_attribute]]
 		else:
 			raise RuntimeError('User creation failed: {}'.format(attributes))
