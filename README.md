@@ -74,3 +74,7 @@ Delete an existing user from the directory
 uid = 'new.user'
 freeipa.users[uid].delete_entry()
 ```
+
+## Test suite
+
+The tests use the builtin `unittest` module and can be run like `python -m unittest discover -s tests -v`
