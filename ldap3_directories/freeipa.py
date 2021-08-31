@@ -32,7 +32,8 @@ class IPAEtc:
 	'''
 	
 	_entry_types = {
-		'ipaConfig'	: 'cn=ipaConfig',
+		'Realm_Domains'	: 'cn=Realm Domains,cn=ipa',
+		'ipaConfig'		: 'cn=ipaConfig',
 	}
 
 	def __init__(self, connection, dry_run = False):
@@ -225,11 +226,11 @@ class IPAUsers(ldap3_.EntriesCollection):
 		if 'gidNumber' not in attributes:
 			attributes['gidNumber'] = attributes['uidNumber']
 		
-#        if 'krbcanonicalname' not in attributes:
-#             attributes['krbcanonicalname'] = '{}@{}'.format(uid, base_domain.upper())
+		if 'krbCanonicalName' not in attributes:
+			attributes['krbCanonicalName'] = '{}@{}'.format(uid, self._directory.etc.Realm_Domains.associatedDomain.value.upper())
 			
-		# if 'krbPrincipalName' not in attributes:
-		# 	attributes['krbPrincipalName'] = '{}@{}'.format(uid, base_domain.upper())
+		if 'krbPrincipalName' not in attributes:
+			attributes['krbPrincipalName'] = attributes['krbCanonicalName']
 		
 		if 'loginShell' not in attributes:
 			attributes['loginShell'] = str(self._directory.etc.ipaConfig.ipaDefaultLoginShell)
