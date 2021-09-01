@@ -84,6 +84,24 @@ class EntriesCollection(dict):
 		self._object_definition = object_definition
 		self._dry_run = dry_run
 
+	def __delitem__(self, name):
+		'''Delete an existing entry
+		Leverages the the entry.delete_entry method to actually delete entries in the collection.
+		
+		ToDo:
+		- Documentation
+		'''
+
+		try:
+			existing_entry = self[name]
+		except KeyError:
+			raise KeyError("Can't delete entry {}; it doesn't exist".format(name))
+		
+		if not self._connection.delete(existing_entry.entry_dn):
+			raise RuntimeError('Deletion of entry {} failed'.name)
+
+		return super().__delitem__(name)
+
 	def __missing__(self, name, attributes = '*'):
 		'''Lazy retrieval of entries
 		The LDAP traffic will happen only when an entry is needed.
@@ -97,7 +115,12 @@ class EntriesCollection(dict):
 		except ValueError:
 			raise KeyError("Couldn't find entry {}".format(name))
 		LOGGER.debug('Got entry for %s: %s', dn, entry)
-		return entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)
+		
+		if self._entry_customizer is not None:
+			entry = self._entry_customizer(entry = entry, dry_run = self._dry_run)
+
+		self.__setitem__(name, entry)
+		return entry
 	
 	def _build_dn(self, name):
 		'''Build the DN for a member
@@ -161,7 +184,7 @@ class EntriesCollection(dict):
 			return self[attributes[self._identity_attribute]]
 		else:
 			raise RuntimeError('User creation failed: {}'.format(attributes))
-		
+
 	def update(self, other, lazy = True):
 		'''Merge mapping into the collection
 		Update existing entries with info from "other" which is expected to be a mapping in the form id_attr->{attribute->values}
@@ -275,9 +298,9 @@ class RWEntryWrapper:
 		
 		if name in self._local_attributes:
 			return super().__setattr__(name, value)
+		elif value is None:
+			return delattr(self, name)
 		elif self._writable or self._make_writable():
-			if value is None:
-				return delattr(self, name)
 			attr = getattr(self._entry, name)
 			if attr.value == value:
 				LOGGER.debug('Skipping up-to-date attribute %s: %s', name, value)
@@ -341,15 +364,6 @@ class RWEntryWrapper:
 				else:
 					result[key] = value.values
 		return result
-	
-	def delete_entry(self):
-		'''Remove this entry
-		
-		ToDo:
-		- Documentation
-		'''
-
-		return self.entry_cursor.connection.delete(self.entry_dn)
 
 	def report_changes(self, raw_changes = False):
 		'''Report the pending changes

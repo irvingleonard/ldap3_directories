@@ -18,7 +18,7 @@ This new class is intended to group similar entries on a dictionary, like all th
 
 ### RWEntryWrapper
 
-This will wrap an [entry](https://ldap3.readthedocs.io/en/latest/abstraction.html#entry) and hide away the read vs write entries distinction. It also adds some extra functionality like reporting pending changes, entry deletion, entry export, etc.
+This will wrap an [entry](https://ldap3.readthedocs.io/en/latest/abstraction.html#entry) and hide away the read vs write entries distinction. It also adds some extra functionality like reporting pending changes, entry export, etc.
 
 ## FreeIPA
 
@@ -72,7 +72,7 @@ freeipa.users.add('new.user', 'New', 'User')
 Delete an existing user from the directory
 ```
 uid = 'new.user'
-freeipa.users[uid].delete_entry()
+del freeipa.users[uid]
 ```
 
 ## Test suite
