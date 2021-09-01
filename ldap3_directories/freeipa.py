@@ -152,7 +152,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		ToDo: Documentation
 		'''
 
-		super().__init__(connection = directory._connection, parent_dn = 'cn=users,cn=accounts', identity_attribute = 'uid', entry_customizer = IPAUser, object_definition = directory.etc.user_definition, dry_run = dry_run)
+		super().__init__(connection = directory._connection, collection_rdn = 'cn=users,cn=accounts', identity_attribute = 'uid', entry_customizer = IPAUser, object_definition = directory.etc.user_definition, dry_run = dry_run)
 		self._directory = directory
 	
 	def __missing__(self, name):
@@ -172,7 +172,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		- Documentation
 		'''
 		
-		self._connection.search(search_base = self._connection.build_dn(self._collection_dn, is_relative = True), search_filter = '(objectclass=posixaccount)', attributes = 'uidNumber')
+		self._connection.search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = '(objectclass=posixaccount)', attributes = 'uidNumber')
 		uidNumbers = [entry['attributes']['uidNumber'] for entry in self._connection.response]
 		uidNumbers.sort()
 		
@@ -246,6 +246,43 @@ class IPAUsers(ldap3_.EntriesCollection):
 		return super().add(**attributes)
 
 
+class IPAGroup(ldap3_.RWEntryWrapper):
+	'''Group wrapper
+	An EntryWrapper that wraps the original group entry to add some functionality
+		
+	ToDo:
+	- Documentation
+	'''
+	
+	def __iadd__(self, other):
+		'''Add member to group
+		The only requirement is that the "other" should have an entry_dn attribute that can actually become a member of the group.
+		'''
+		
+		if self.entry_is_writable:
+			if other.entry_dn in self.member:
+				LOGGER.info('Group %s already has a member %s', self.cn, other.entry_dn)
+			else:
+				self.member.add(other.entry_dn)
+				self.entry_commit_changes()
+		else:
+			raise RuntimeError('Entry seems to be read-only')
+
+	def __isub__(self, other):
+		'''Remove member to group
+		The only requirement is that the "other" should have an entry_dn attribute which is already a member of the group.
+		'''
+
+		if self.entry_is_writable:
+			if other.entry_dn in self.member:
+				self.member.delete(other.entry_dn)
+				self.entry_commit_changes()
+			else:
+				LOGGER.info("Group %s doesn't has a member %s", self.cn, other.entry_dn)
+		else:
+			raise RuntimeError('Entry seems to be read-only')
+
+
 class IPAGroups(ldap3_.EntriesCollection):
 	'''Collection of groups
 	Groups in FreeIPA live in a single level. They're mapped into this collection.
@@ -260,8 +297,17 @@ class IPAGroups(ldap3_.EntriesCollection):
 		ToDo: Documentation
 		'''
 
-		super().__init__(connection = directory._connection, parent_dn = 'cn=groups,cn=accounts', object_definition = directory.etc.group_definition, dry_run = dry_run)
+		super().__init__(connection = directory._connection, collection_rdn = 'cn=groups,cn=accounts', entry_customizer = IPAGroup, object_definition = directory.etc.group_definition, dry_run = dry_run)
 		self._directory = directory
+
+	def add(self, name, **attributes):
+
+		if len(name):
+			attributes['cn'] = name
+		else:
+			raise ValueError("Name can't be empty")
+
+		return super().add(**attributes)
 
 
 class IPADirectory:
