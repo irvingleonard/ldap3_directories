@@ -263,6 +263,7 @@ class IPAGroup(ldap3_.RWEntryWrapper):
 			if other.entry_dn in self.member:
 				LOGGER.info('Group %s already has a member %s', self.cn, other.entry_dn)
 			else:
+				LOGGER.debug('Group %s is getting a new member %s', self.cn, other.entry_dn)
 				self.member.add(other.entry_dn)
 				self.entry_commit_changes()
 		else:
@@ -275,6 +276,7 @@ class IPAGroup(ldap3_.RWEntryWrapper):
 
 		if self.entry_is_writable:
 			if other.entry_dn in self.member:
+				LOGGER.debug('Group %s is losing a member %s', self.cn, other.entry_dn)
 				self.member.delete(other.entry_dn)
 				self.entry_commit_changes()
 			else:

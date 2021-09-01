@@ -114,7 +114,7 @@ class EntriesCollection(dict):
 			entry = self._connection.get_entry_by_dn(dn, attributes = attributes)
 		except ValueError:
 			raise KeyError("Couldn't find entry {}".format(name))
-		LOGGER.debug('Got entry for %s: %s', dn, entry)
+		# LOGGER.debug('Got entry for %s: %s', dn, entry)
 		
 		if self._entry_customizer is not None:
 			entry = self._entry_customizer(entry = entry, dry_run = self._dry_run)
