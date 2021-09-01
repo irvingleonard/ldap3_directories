@@ -70,7 +70,7 @@ class EntriesCollection(dict):
 	- Documentation
 	'''
 	
-	def __init__(self, connection, parent_dn, identity_attribute = 'cn', entry_customizer = None, object_definition = None, dry_run = False):
+	def __init__(self, connection, collection_rdn, identity_attribute = 'cn', entry_customizer = None, object_definition = None, dry_run = False):
 		'''Magic initialization method
 		
 		ToDo: Documentation
@@ -79,7 +79,7 @@ class EntriesCollection(dict):
 		super().__init__()
 		self._connection = connection
 		self._identity_attribute = identity_attribute
-		self._collection_dn = parent_dn
+		self._collection_rdn = collection_rdn
 		self._entry_customizer = entry_customizer
 		self._object_definition = object_definition
 		self._dry_run = dry_run
@@ -130,7 +130,7 @@ class EntriesCollection(dict):
 		- Documentation
 		'''
 
-		return self._connection.build_dn('{}={}'.format(self._identity_attribute, name), self._collection_dn, is_relative = True)
+		return self._connection.build_dn('{}={}'.format(self._identity_attribute, name), self._collection_rdn, is_relative = True)
 
 	def advanced_search(self, *args, **kwargs):
 		'''Classic advanced search
@@ -233,18 +233,18 @@ class RWEntryWrapper:
 	- Read/write distinctions are gone. Just write to it and that's it.
 	- Writing the same values into attributes will be ignored. The list of changes will contain actual changes opposed to "operations requested"
 	- Deleting an attribute does that: it deletes the attribute 'del entry.attr'
+	- By asking for the entry_is_writable it's assumed that a method will try to change something, which means that the read-only -> read&write conversion will be performed
 		
 	ToDo: Documentation
 	'''
 	
 	_local_attributes = (
-		'_entry',
 		'_dry_run',
+		'_entry',
 		'_local_attributes',
 		'_original_entry',
-		'_writable',
+		'entry_is_writable',
 	)
-	_writable = False
 
 	def __init__(self, entry, dry_run = False):
 		'''Magic initialization method
@@ -263,14 +263,14 @@ class RWEntryWrapper:
 		ToDo: Documentation
 		'''
 		
-		if  self._writable and len(self._entry._changes):
+		if  self.entry_is_writable and len(self._changes):
 			if self._dry_run:
-				LOGGER.info("Not pushing changes for entry %s since it's a dry run", self._entry.entry_dn)
+				LOGGER.info("Not pushing changes for entry %s since it's a dry run", self.entry_dn)
 			else:
-				LOGGER.debug('Pushing updates for entry %s: %s', self._entry.entry_dn, self._entry._changes)
-				self._entry.entry_commit_changes()
+				LOGGER.debug('Pushing updates for entry %s: %s', self.entry_dn, self._changes)
+				self.entry_commit_changes()
 		else:
-			LOGGER.debug('No changes for entry %s', self._entry.entry_dn)
+			LOGGER.debug('No changes for entry %s', self.entry_dn)
 	
 	def __dir__(self):
 		'''Magic dir method
@@ -289,7 +289,22 @@ class RWEntryWrapper:
 		If the wrapper doesn't have such attribute it must be part of the inner entry.
 		'''
 		
-		return getattr(self._entry, name)
+		if name == 'entry_is_writable':
+			# Switch to a writable entry
+			# The underlying ORM (ldap3) uses read-only Entry objects that need to be converted to a writable version. This method does that, it also saves the original read-only entry in self._original_entry
+			if self.entry_status.lower() in ('read',):
+				w_entry = self.entry_writable()
+				self._original_entry = self._entry
+				self._entry = w_entry
+				setattr(self, 'entry_is_writable', True)
+				return True
+			elif self.entry_status.lower() in ('writable',):
+				setattr(self, 'entry_is_writable', True)
+				return True
+			else:
+				raise RuntimeError('Unhandled entry state: {}'.format(self.entry_status))
+		else:
+			return getattr(self._entry, name)
 	
 	def __setattr__(self, name, value):
 		'''Attribute assignment separation
@@ -300,7 +315,7 @@ class RWEntryWrapper:
 			return super().__setattr__(name, value)
 		elif value is None:
 			return delattr(self, name)
-		elif self._writable or self._make_writable():
+		elif self.entry_is_writable:
 			attr = getattr(self._entry, name)
 			if attr.value == value:
 				LOGGER.debug('Skipping up-to-date attribute %s: %s', name, value)
@@ -322,7 +337,7 @@ class RWEntryWrapper:
 			raise ValueError("Unable to delete non existing attribute {}".format(name))
 		elif getattr(self._entry, name).value is None:
 			LOGGER.debug('Skipping already removed attribute: %s', name)
-		elif self._writable or self._make_writable():
+		elif self.entry_is_writable:
 			return getattr(self._entry, name).remove()
 		else:
 			raise RuntimeError('Entry is read-only, apparently')
@@ -333,23 +348,6 @@ class RWEntryWrapper:
 		'''
 		
 		return self._entry.__repr__()
-	
-	def _make_writable(self):
-		'''Switch to a writable entry
-		The underlying ORM (ldap3) uses read-only Entry objects that need to be converted to a writable version. This method does that, it also saves the original read-only entry in self._original_entry
-		'''
-		
-		if self.entry_status.lower() in ('read',):
-			w_entry = self._entry.entry_writable()
-			self._original_entry = self._entry
-			self._entry = w_entry
-			setattr(self, '_writable', True)
-			return True
-		elif self.entry_status.lower() in ('writable',):
-			setattr(self, '_writable', True)
-			return True
-		else:
-			raise RuntimeError('Unhandled entry state: {}'.format(self.entry_status))
 	
 	def as_dict(self, skip_attrs = ()):
 		'''Cast to dict
@@ -371,10 +369,10 @@ class RWEntryWrapper:
 		'''
 		
 		if raw_changes:
-			return self._entry._changes
+			return self._changes
 		
 		changes = {}
-		for key, operation in self._entry._changes.items():
+		for key, operation in self._changes.items():
 			old_value = getattr(self._original_entry, key).value if hasattr(self._original_entry, key) else None
 			new_value = operation[0][1]
 			changes[key] = (old_value, new_value[0] if len(new_value) else None)
