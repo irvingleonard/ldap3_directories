@@ -6,7 +6,9 @@ ToDo:
 - Everything
 '''
 
+import functools
 import logging
+import operator
 
 import ldap3
 import ldap3.core.exceptions
@@ -161,7 +163,8 @@ class EntriesCollection(dict):
 		LOGGER.debug('Querying LDAP server with: %s', query)
 		result = ldap3.Reader(self._connection, self._object_definition, self._connection.base_dn, query).search()
 		LOGGER.debug('Got %d hits for the query', len(result))
-		return {getattr(entry, self._identity_attribute).value : EntryWrapper(entry) for entry in result}
+
+		return {getattr(entry, self._identity_attribute).value : (entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)) for entry in result}
 	
 	def add(self, **attributes):
 		'''Create a new entry
