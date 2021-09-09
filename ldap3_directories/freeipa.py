@@ -146,6 +146,8 @@ class IPAUsers(ldap3_.EntriesCollection):
 	- Documentation
 	'''
 
+	_entry_attributes = ('*', '+')
+
 	def __init__(self, directory, dry_run = False):
 		'''Magic initialization method
 		
@@ -154,15 +156,6 @@ class IPAUsers(ldap3_.EntriesCollection):
 
 		super().__init__(connection = directory._connection, collection_rdn = 'cn=users,cn=accounts', identity_attribute = 'uid', entry_customizer = IPAUser, object_definition = directory.etc.user_definition, dry_run = dry_run)
 		self._directory = directory
-	
-	def __missing__(self, name):
-		'''Lazy retrieval of entries
-		Users require operational attributes too.
-		
-		ToDo: Documentation
-		'''
-
-		return super().__missing__(name, attributes = ('*', '+'))
 
 	def _get_next_uid_number(self):
 		'''Get a free UID number

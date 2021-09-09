@@ -6,4 +6,4 @@ ToDo:
 - Everything
 '''
 
-__version__ = '0.2.3.beta8'
+__version__ = '0.2.3.beta9'
