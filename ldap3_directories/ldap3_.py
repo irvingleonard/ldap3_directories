@@ -151,7 +151,7 @@ class EntriesCollection(dict):
 		query = list(args)
 		for attr_name, attr_values in kwargs.items():
 			if len(attr_values):
-				attr = getattr(self.object_definition, attr_name)
+				attr = getattr(self._object_definition, attr_name)
 				query.append(functools.reduce(operator.or_, [attr == attr_value for attr_value in attr_values]))
 		if len(query):
 			query = functools.reduce(operator.and_, query)
@@ -159,7 +159,7 @@ class EntriesCollection(dict):
 			query = ''
 		
 		LOGGER.debug('Querying LDAP server with: %s', query)
-		result = Reader(self._connection, self.object_definition, self.base_dn, query).search()
+		result = ldap3.Reader(self._connection, self._object_definition, self._connection.base_dn, query).search()
 		LOGGER.debug('Got %d hits for the query', len(result))
 		return {getattr(entry, self._identity_attribute).value : EntryWrapper(entry) for entry in result}
 	
