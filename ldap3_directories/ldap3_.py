@@ -72,7 +72,7 @@ class EntriesCollection(dict):
 	- Documentation
 	'''
 	
-	_entry_attributes = '*'
+	_entry_attributes = ldap3.ALL_ATTRIBUTES
 
 	def __init__(self, connection, collection_rdn, identity_attribute = 'cn', entry_customizer = None, object_definition = None, dry_run = False):
 		'''Magic initialization method
@@ -163,7 +163,7 @@ class EntriesCollection(dict):
 			query = ''
 		
 		LOGGER.debug('Querying LDAP server with: %s', query)
-		result = ldap3.Reader(connection = self._connection, object_def = self._object_definition, base = self._connection.base_dn, query = query, attributes = self._entry_attributes).search()
+		result = ldap3.Reader(connection = self._connection, object_def = self._object_definition, base = self._connection.base_dn, query = query, get_operational_attributes = True if ldap3.ALL_OPERATIONAL_ATTRIBUTES in self._entry_attributes else False).search()
 		LOGGER.debug('Got %d hits for the query', len(result))
 
 		return {getattr(entry, self._identity_attribute).value : (entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)) for entry in result}
