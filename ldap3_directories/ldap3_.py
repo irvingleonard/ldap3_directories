@@ -72,6 +72,8 @@ class EntriesCollection(dict):
 	- Documentation
 	'''
 	
+	_entry_attributes = '*'
+
 	def __init__(self, connection, collection_rdn, identity_attribute = 'cn', entry_customizer = None, object_definition = None, dry_run = False):
 		'''Magic initialization method
 		
@@ -104,7 +106,7 @@ class EntriesCollection(dict):
 
 		return super().__delitem__(name)
 
-	def __missing__(self, name, attributes = '*'):
+	def __missing__(self, name):
 		'''Lazy retrieval of entries
 		The LDAP traffic will happen only when an entry is needed.
 		
@@ -113,7 +115,7 @@ class EntriesCollection(dict):
 		
 		dn = self._build_dn(name)
 		try:
-			entry = self._connection.get_entry_by_dn(dn, attributes = attributes)
+			entry = self._connection.get_entry_by_dn(dn, attributes = self._entry_attributes)
 		except ValueError:
 			raise KeyError("Couldn't find entry {}".format(name))
 		# LOGGER.debug('Got entry for %s: %s', dn, entry)
@@ -161,7 +163,7 @@ class EntriesCollection(dict):
 			query = ''
 		
 		LOGGER.debug('Querying LDAP server with: %s', query)
-		result = ldap3.Reader(self._connection, self._object_definition, self._connection.base_dn, query).search()
+		result = ldap3.Reader(connection = self._connection, definition = self._object_definition, query = query, base = self._connection.base_dn, attributes = self._entry_attributes).search()
 		LOGGER.debug('Got %d hits for the query', len(result))
 
 		return {getattr(entry, self._identity_attribute).value : (entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)) for entry in result}
