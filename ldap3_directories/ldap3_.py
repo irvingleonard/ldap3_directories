@@ -163,7 +163,7 @@ class EntriesCollection(dict):
 			query = ''
 		
 		LOGGER.debug('Querying LDAP server with: %s', query)
-		result = ldap3.Reader(connection = self._connection, definition = self._object_definition, query = query, base = self._connection.base_dn, attributes = self._entry_attributes).search()
+		result = ldap3.Reader(connection = self._connection, object_def = self._object_definition, base = self._connection.base_dn, query = query, attributes = self._entry_attributes).search()
 		LOGGER.debug('Got %d hits for the query', len(result))
 
 		return {getattr(entry, self._identity_attribute).value : (entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)) for entry in result}
