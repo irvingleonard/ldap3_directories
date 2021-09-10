@@ -210,7 +210,7 @@ class EntriesCollection(dict):
 		else:
 			raise RuntimeError('User creation failed: {}'.format(attributes))
 
-	def advanced_search(self, *args, **kwargs):
+	def advanced_search(self, *args, entry_attributes = None, **kwargs):
 		'''Classic advanced search
 		Equality search filter created with a combination of AND and OR operations.
 		
@@ -235,12 +235,27 @@ class EntriesCollection(dict):
 			else:
 				raise NotImplementedError('Search for absent attribute')
 		
+		if entry_attributes is None:
+			entry_attributes = (self._identity_attribute,)
+		else:
+			if isinstance(entry_attributes, str):
+				entry_attributes = (entry_attributes,)
+			entry_attributes = (self._identity_attribute,) + tuple(entry_attributes)
+
 		LOGGER.debug('Querying LDAP server with: %s', query)
-		self._connection.search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = str(query), attributes = self._identity_attribute)
+		self._connection.search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = str(query), attributes = entry_attributes)
 		LOGGER.debug('Got %d hits for the query', len(self._connection.response))
 
-		result = [entry['attributes'][self._identity_attribute][0] if isinstance(entry['attributes'][self._identity_attribute], list) else entry['attributes'][self._identity_attribute] for entry in self._connection.response]
-		return {identity_value : self[identity_value] for identity_value in result}
+		if len(entry_attributes) == 1:
+			result = [entry['attributes'][self._identity_attribute][0] if isinstance(entry['attributes'][self._identity_attribute], list) else entry['attributes'][self._identity_attribute] for entry in self._connection.response]
+			return {identity_value : self[identity_value] for identity_value in result}
+		else:
+			result = {}
+			for entry in self._connection.response:
+				id_attr = entry['attributes'][self._identity_attribute][0] if isinstance(entry['attributes'][self._identity_attribute], list) else entry['attributes'][self._identity_attribute]
+				result[id_attr] = {attr_name : entry['attributes'][attr_name] for attr_name in entry_attributes}
+			return result
+
 
 	def update(self, other, lazy = True):
 		'''Merge mapping into the collection
