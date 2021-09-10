@@ -15,6 +15,58 @@ import ldap3.core.exceptions
 
 LOGGER = logging.getLogger(__name__)
 
+
+class QueryJoin(list):
+	'''Modeling an LDAP filter join
+	It joins LDAP assertions or other joins: (<operation>(part)(part)...)
+	'''
+
+	def __init__(self, operation, *parts):
+		'''Initialization magic
+		It's a simple list, plus the operation information, which is saved on an attribute
+		'''
+		
+		super().__init__()
+		self.ldap_operation = operation
+		self.extend(parts)
+
+	def __repr__(self):
+		'''Repr magic
+		Ready to be eval'd
+		'''
+
+		return '{class_}({params})'.format(class_ = self.__class__.__name__, params = ', '.join([repr(param) for param in [self.ldap_operation] + self]))
+
+	def __str__(self):
+		'''Str magic
+		The actual result, the computation of the filter.
+		'''
+
+		if len(self) == 0:
+			return ''
+		elif len(self) == 1:
+			return str(self[0])
+		else:
+			return '({}{})'.format(self.ldap_operation, ''.join([str(item) for item in self]))
+
+
+class QueryAssertion(str):
+	'''Modeling an LDAP assertion
+	This is a simple model for an LDAP assertion: (attribute<operation>value).
+
+	Ex:
+	(cn=example_entry)
+	(objectClass=*)
+	'''
+
+	def __new__(cls, attribute, value, comparison = '='):
+		'''Magic method to create instance
+		It creates the underlying string instance based on the values provided.
+		'''
+		
+		return super().__new__(cls, '({}{}{})'.format(attribute, comparison, value))
+
+
 class Connection(ldap3.Connection):
 	
 	def __init__(self, *args, base_dn = None, **kwargs):
@@ -136,38 +188,6 @@ class EntriesCollection(dict):
 
 		return self._connection.build_dn('{}={}'.format(self._identity_attribute, name), self._collection_rdn, is_relative = True)
 
-	def advanced_search(self, *args, **kwargs):
-		'''Classic advanced search
-		Equality search filter created with a combination of AND and OR operations.
-		
-		The algorithm works as follows:
-		- The keyword parameters are expected to be ldap_attr=values (the ldap_attr HAS TO be supported by the ObjectDef)
-		- Each value instance will be compared for equality which results in the basic value filter
-		- Each value filter will be ORed together into an attribute filter
-		- The keyword filter will be the AND of all the attribute filters
-		- The unnamed parameters will be treated as filter instances (the result of a comparison with ObjectDef)
-		- The final filter will be the AND of the keyword filter and the unnamed parameters
-		
-		ToDo: Documentation
-		'''
-		
-		LOGGER.debug('Performing an advanced search with: %s | %s', args, kwargs)
-		query = list(args)
-		for attr_name, attr_values in kwargs.items():
-			if len(attr_values):
-				attr = getattr(self._object_definition, attr_name)
-				query.append(functools.reduce(operator.or_, [attr == attr_value for attr_value in attr_values]))
-		if len(query):
-			query = functools.reduce(operator.and_, query)
-		else:
-			query = ''
-		
-		LOGGER.debug('Querying LDAP server with: %s', query)
-		result = ldap3.Reader(connection = self._connection, object_def = self._object_definition, base = self._connection.base_dn, query = query, get_operational_attributes = True if ldap3.ALL_OPERATIONAL_ATTRIBUTES in self._entry_attributes else False).search()
-		LOGGER.debug('Got %d hits for the query', len(result))
-
-		return {getattr(entry, self._identity_attribute).value : (entry if self._entry_customizer is None else self._entry_customizer(entry = entry, dry_run = self._dry_run)) for entry in result}
-	
 	def add(self, **attributes):
 		'''Create a new entry
 		Create an entry in this collection based on the information provided.
@@ -189,6 +209,38 @@ class EntriesCollection(dict):
 			return self[attributes[self._identity_attribute]]
 		else:
 			raise RuntimeError('User creation failed: {}'.format(attributes))
+
+	def advanced_search(self, *args, **kwargs):
+		'''Classic advanced search
+		Equality search filter created with a combination of AND and OR operations.
+		
+		The algorithm works as follows:
+		- The keyword parameters are expected to be ldap_attr=values
+		- The keyword parameters will be converted to LDAP assertions
+		- Multiple values for a single attributed will be ORed together
+		- Positional parameters should be valid filters (assertions, or assertion joins)
+		- All the assertions, "assertions OR joins", and positional parameters will be ANDed together
+		
+		ToDo: Documentation
+		'''
+		
+		LOGGER.debug('Performing an advanced search with: %s | %s', args, kwargs)
+		query = QueryJoin('&', *args)
+		for attr_name, attr_values in kwargs.items():
+			if len(attr_values):
+				if isinstance(attr_values, str):
+					query.append(QueryAssertion(attr_name, attr_values))
+				else:
+					query.append(QueryJoin('|', *[QueryAssertion(attr_name, value) for value in attr_values]))
+			else:
+				raise NotImplementedError('Search for absent attribute')
+		
+		LOGGER.debug('Querying LDAP server with: %s', query)
+		self._connection.search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = str(query), attributes = self._identity_attribute)
+		LOGGER.debug('Got %d hits for the query', len(self._connection.response))
+
+		result = [entry['attributes'][self._identity_attribute][0] if isinstance(entry['attributes'][self._identity_attribute], list) else entry['attributes'][self._identity_attribute] for entry in self._connection.response]
+		return {identity_value : self[identity_value] for identity_value in result}
 
 	def update(self, other, lazy = True):
 		'''Merge mapping into the collection
