@@ -184,7 +184,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		- Documentation
 		'''
 		
-		LOGGER.debug('Creating user with: %s', {'uid' : uid, 'givenName' : givenName, 'sn' : sn} | attributes)
+		LOGGER.debug('Creating user with: %s, %s', {'uid' : uid, 'givenName' : givenName, 'sn' : sn}, attributes)
 		
 		if len(uid):
 			attributes['uid'] = uid
