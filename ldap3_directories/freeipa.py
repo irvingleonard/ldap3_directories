@@ -233,9 +233,12 @@ class IPAUsers(ldap3_.EntriesCollection):
 			
 		if 'mail' not in attributes:
 			attributes['mail'] = '{}@{}'.format(uid, self._directory.etc.ipaConfig.ipaDefaultEmailDomain)
+
+		collection_dn = self._connection.build_dn(self._collection_rdn, is_relative = True)
+		if ('manager' in attributes) and (attributes['manager'].find(collection_dn) < 0):
+			attributes['manager'] = self[attributes['manager']].entry_dn
 		
 		LOGGER.info('Creating user: %s', attributes)
-
 		return super().add(**attributes)
 
 
