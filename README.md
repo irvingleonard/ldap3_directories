@@ -78,3 +78,6 @@ del freeipa.users[uid]
 ## Test suite
 
 The tests use the builtin `unittest` module and can be run like `python -m unittest discover -s tests -v`
+
+Using [Docker](https://www.docker.com/) this suite can be run in different environments:
+`docker run -it --rm -v "$PWD":/usr/src/myapp -w /usr/src/myapp python:3.X-slim python -m unittest discover -s tests`
