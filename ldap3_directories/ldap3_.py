@@ -49,6 +49,16 @@ class QueryJoin(list):
 		else:
 			return '({}{})'.format(self.ldap_operation, ''.join([str(item) for item in self]))
 
+	def __neg__(self):
+		'''Magic method for unary minus
+		It negates the current assertion.
+		'''
+
+		if len(self):
+			return '(!{})'.format(self)
+		else:
+			return ''
+
 
 class QueryAssertion(str):
 	'''Modeling an LDAP assertion
@@ -65,6 +75,13 @@ class QueryAssertion(str):
 		'''
 		
 		return super().__new__(cls, '({}{}{})'.format(attribute, comparison, value))
+
+	def __neg__(self):
+		'''Magic method for unary minus
+		It negates the current assertion.
+		'''
+
+		return '(!{})'.format(self)
 
 
 class Connection(ldap3.Connection):
