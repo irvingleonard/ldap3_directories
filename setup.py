@@ -33,8 +33,9 @@ setuptools.setup(
 	keywords = 'ldap ldap3 freeipa',
 	python_requires = '>=3.7',
 	install_requires=(
-		"ldap3",
-		"simplifiedapp",
+		'dnspython',
+		'ldap3',
+		'simplifiedapp',
 	),
 	packages = setuptools.find_packages(),
 	
