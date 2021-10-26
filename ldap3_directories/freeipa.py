@@ -11,6 +11,7 @@ import logging
 import pathlib
 import urllib.parse
 
+import dns.resolver
 import ldap3
 import ldap3.core.exceptions
 import simplifiedapp
@@ -239,7 +240,12 @@ class IPAUsers(ldap3_.EntriesCollection):
 			attributes['manager'] = self[attributes['manager']].entry_dn
 		
 		LOGGER.info('Creating user: %s', attributes)
-		return super().add(**attributes)
+		new_user = super().add(**attributes)
+		
+		LOGGER.debug('Adding new user to default group: %s', self._directory.groups.primary_default)
+		self._directory.groups.primary_default += new_user
+		
+		return new_user
 
 
 class IPAGroup(ldap3_.RWEntryWrapper):
@@ -297,7 +303,21 @@ class IPAGroups(ldap3_.EntriesCollection):
 
 		super().__init__(connection = directory._connection, collection_rdn = 'cn=groups,cn=accounts', entry_customizer = IPAGroup, object_definition = directory.etc.group_definition, dry_run = dry_run)
 		self._directory = directory
-
+	
+	def __getattr__(self, name):
+		'''Lazy instantiation
+		Some computation that is left pending until is needed.
+		
+		ToDo: Documentation
+		'''
+		
+		if name == 'primary_default':
+			value = self[str(self._directory.etc.ipaConfig.ipaDefaultPrimaryGroup)]
+		else:
+			raise AttributeError(name)
+		self.__setattr__(name, value)
+		return value
+	
 	def add(self, name, **attributes):
 
 		if len(name):
@@ -324,7 +344,7 @@ class IPADirectory:
 		'raise_exceptions'	: True,
 	}
 
-	def __init__(self, servers, base_dn, username = None, password = None, dry_run = False):
+	def __init__(self, domain_name, username = None, password = None, dry_run = False):
 		'''Instance initialization
 		The LDAP connection is established
 		
@@ -339,9 +359,22 @@ class IPADirectory:
 		if password is None:
 			raise RuntimeError("Kerberos' keytab authentication is not implemented yet.")
 		
-		else:	
-			cluster = ldap3.ServerPool([ldap3.Server(server, use_ssl = True) for server in (servers.split(' ') if isinstance(servers, str) else servers)], ldap3.FIRST, active = 1, exhaust = True)
-			self._connection = ldap3_.Connection(server = cluster, base_dn = base_dn, user = 'uid={},cn=users,cn=accounts,{}'.format(username, base_dn), password = password, **self._LDAP_CONNECTION_PARAMS)
+		srv_records = {}
+		for srv_record in dns.resolver.resolve('_ldap._tcp.{}'.format(domain_name), 'SRV'):
+			if srv_record.weight not in srv_records:
+				srv_records[srv_record.weight] = []
+			srv_records[srv_record.weight].append(srv_record)
+		weights = list(srv_records)
+		weights.sort()		
+		
+		servers = []
+		for weight in weights:
+			servers += [str(srv_record.target) for srv_record in srv_records[weight]]
+		cluster = ldap3.ServerPool([ldap3.Server(server, use_ssl = True) for server in servers], ldap3.FIRST, active = 1, exhaust = True)
+		
+		base_dn = self.domain_to_dn(domain_name)
+		
+		self._connection = ldap3_.Connection(server = cluster, base_dn = base_dn, user = 'uid={},cn=users,cn=accounts,{}'.format(username, base_dn), password = password, **self._LDAP_CONNECTION_PARAMS)
 		
 		self._dry_run = dry_run
 	
@@ -363,7 +396,14 @@ class IPADirectory:
 			raise AttributeError(name)
 		setattr(self, name, value)
 		return value
-
+	
+	@staticmethod
+	def domain_to_dn(domain):
+		
+		dn = domain.split('.')
+		dn = ['dc={}'.format(part) for part in dn]
+		return ','.join(dn)
+		
 
 if __name__ == '__main__':
 	simplifiedapp.main()
