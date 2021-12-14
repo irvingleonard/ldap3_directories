@@ -24,6 +24,45 @@ except ImportError:
 LOGGER = logging.getLogger(__name__)
 
 
+class LDAPConfig:
+	'''Internal LDAP/389 configuration
+	LDAP branch holding the LDAP server (389) configuration
+		
+	ToDo:
+	- Documentation
+	'''
+	
+	_entry_types = {
+		'features'		: 'cn=features',
+		'mapping_tree'	: 'cn=mapping tree',
+		'plugins'		: 'cn=plugins',
+		'snmp'			: 'cn=SNMP',
+		'tasks'			: 'cn=tasks',
+	}
+	
+	def __init__(self, connection, dry_run = False):
+		
+		self._connection = connection
+		self._dry_run = dry_run
+	
+	def __getattr__(self, name):
+		'''Lazy instantiation
+		Some computation that is left pending until is needed.
+		
+		ToDo: Documentation
+		'''
+		
+		if name in self._entry_types.keys():
+			value = self._connection.get_entry_by_dn(self._entry_types[name], 'cn=config')
+		elif name == 'dna_next_value':
+			value = self._connection.get_entry_by_dn('cn=Posix IDs', 'cn=Distributed Numeric Assignment Plugin', 'cn=plugins', 'cn=config')
+			value = int(str(value.dnaNextValue))
+		else:
+			raise AttributeError(name)
+		self.__setattr__(name, value)
+		return value
+	
+
 class IPAEtc:
 	'''Internal IPA configuration
 	LDAP branch holding the IPA configuration
@@ -51,10 +90,15 @@ class IPAEtc:
 		
 		if name in self._entry_types.keys():
 			value = self._connection.get_entry_by_dn(self._entry_types[name], 'cn=etc', is_relative = True)
-		elif name == 'user_definition':
-			value = ldap3.ObjectDef(list(self.ipaConfig.ipaUserObjectClasses), self._connection)
 		elif name == 'group_definition':
 			value = ldap3.ObjectDef(list(self.ipaConfig.ipaGroupObjectClasses), self._connection)
+		elif name == 'realm_domain':
+			value = str(self.Realm_Domains.associatedDomain).upper()
+		elif name == 'uid_range':
+			value = self._connection.get_entry_by_dn('cn={}_id_range'.format(self.realm_domain), 'cn=ranges', 'cn=etc', is_relative = True)
+			value = range(int(str(value.ipaBaseID)), int(str(value.ipaBaseID)) + int(str(value.ipaIDRangeSize)))
+		elif name == 'user_definition':
+			value = ldap3.ObjectDef(list(self.ipaConfig.ipaUserObjectClasses), self._connection)
 		else:
 			raise AttributeError(name)
 		self.__setattr__(name, value)
@@ -166,15 +210,21 @@ class IPAUsers(ldap3_.EntriesCollection):
 		- Documentation
 		'''
 		
-		self._connection.search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = '(objectclass=posixaccount)', attributes = 'uidNumber')
-		uidNumbers = [entry['attributes']['uidNumber'] for entry in self._connection.response]
-		uidNumbers.sort()
+		#Distributed Numeric Assignment Plugin doesn't get triggered with a regular LDAP ADD; the dnaNextValue gets stuck at whatever the current value is.
+# 		try:
+# 			return self._directory.ldap.dna_next_value
+# 		except RuntimeError:
+# 			LOGGER.warning("The provided credentials can't reach the Distributed Numeric Assignment Plugin configuration. Generating a new UID number using global values")
 		
-		possibleUID = uidNumbers[0]
-		for uidN in uidNumbers:
-			if uidN != possibleUID:
+		posix_accounts = self._connection.extend.standard.paged_search(search_base = self._connection.build_dn(self._collection_rdn, is_relative = True), search_filter = '(objectClass=posixaccount)', attributes = 'uidNumber', paged_size = int(str(self._directory.etc.ipaConfig.ipaSearchRecordsLimit)), generator = True)
+		uidNumbers = [int(entry['attributes']['uidNumber']) for entry in posix_accounts]
+		
+		for possibleUID in self._directory.etc.uid_range:
+			if possibleUID not in uidNumbers:
 				break
-			possibleUID += 1
+		else:
+			raise RuntimeError('No more UID numbers available in {}'.format(self._directory.domain_name))
+		
 		return possibleUID
 	
 	def add(self, uid, givenName, sn, **attributes):
@@ -188,7 +238,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 		LOGGER.debug('Creating user with: %s, %s', {'uid' : uid, 'givenName' : givenName, 'sn' : sn}, attributes)
 		
 		if len(uid):
-			attributes['uid'] = uid
+			attributes['uid'] = uid.lower()
 		else:
 			raise ValueError("UID can't be empty")
 
@@ -209,7 +259,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 			attributes['displayName'] = attributes['cn']
 		
 		if 'initials' not in attributes:
-			attributes['initials'] = str(attributes['givenName'])[0] + str(attributes['sn'])[0]
+			attributes['initials'] = str(attributes['givenName'])[0].upper() + str(attributes['sn'])[0].upper()
 		
 		if 'gecos' not in attributes:
 			attributes['gecos'] = attributes['cn']
@@ -221,7 +271,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 			attributes['gidNumber'] = attributes['uidNumber']
 		
 		if 'krbCanonicalName' not in attributes:
-			attributes['krbCanonicalName'] = '{}@{}'.format(uid, self._directory.etc.Realm_Domains.associatedDomain.value.upper())
+			attributes['krbCanonicalName'] = '{}@{}'.format(uid, self._directory.etc.realm_domain)
 			
 		if 'krbPrincipalName' not in attributes:
 			attributes['krbPrincipalName'] = attributes['krbCanonicalName']
@@ -352,6 +402,8 @@ class IPADirectory:
 		- Implement logout (and call it on __del__)
 		'''
 		
+		self.domain_name = domain_name
+		
 		if (username is None) or not len(username):
 			username = input('Username: ')
 			password = getpass.getpass('Password: ')
@@ -376,7 +428,7 @@ class IPADirectory:
 		
 		base_dn = self.domain_to_dn(domain_name)
 		
-		LOGGER.debug('Connecting to FreeIPA cluster: %s')
+		LOGGER.debug('Connecting to FreeIPA cluster: %s', cluster)
 		self._connection = ldap3_.Connection(server = cluster, base_dn = base_dn, user = 'uid={},cn=users,cn=accounts,{}'.format(username, base_dn), password = password, **self._LDAP_CONNECTION_PARAMS)
 		
 		self._dry_run = dry_run
@@ -391,10 +443,12 @@ class IPADirectory:
 		
 		if name == 'etc':
 			value = IPAEtc(connection = self._connection, dry_run = self._dry_run)
-		elif name == 'users':
-			value = IPAUsers(directory = self, dry_run = self._dry_run)
 		elif name == 'groups':
 			value = IPAGroups(directory = self, dry_run = self._dry_run)
+		elif name == 'ldap':
+			value = LDAPConfig(connection = self._connection, dry_run = self._dry_run)
+		elif name == 'users':
+			value = IPAUsers(directory = self, dry_run = self._dry_run)
 		else:
 			raise AttributeError(name)
 		setattr(self, name, value)
