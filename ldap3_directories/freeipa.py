@@ -412,7 +412,7 @@ class IPADirectory:
 			raise RuntimeError("Kerberos' keytab authentication is not implemented yet.")
 		
 		srv_records = {}
-		LOGGER.debug('Querying SRV records for %s', domain_name)
+		LOGGER.debug('Querying SRV records for domain %s', domain_name)
 		for srv_record in dns.resolver.resolve('_ldap._tcp.{}'.format(domain_name), 'SRV'):
 			if srv_record.weight not in srv_records:
 				srv_records[srv_record.weight] = []
