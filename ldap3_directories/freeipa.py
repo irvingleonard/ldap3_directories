@@ -271,7 +271,7 @@ class IPAUsers(ldap3_.EntriesCollection):
 			attributes['gidNumber'] = attributes['uidNumber']
 		
 		if 'krbCanonicalName' not in attributes:
-			attributes['krbCanonicalName'] = '{}@{}'.format(uid, self._directory.etc.realm_domain)
+			attributes['krbCanonicalName'] = '{}@{}'.format(attributes['uid'], self._directory.etc.realm_domain)
 			
 		if 'krbPrincipalName' not in attributes:
 			attributes['krbPrincipalName'] = attributes['krbCanonicalName']
@@ -280,10 +280,10 @@ class IPAUsers(ldap3_.EntriesCollection):
 			attributes['loginShell'] = str(self._directory.etc.ipaConfig.ipaDefaultLoginShell)
 		
 		if 'homeDirectory' not in attributes:
-			attributes['homeDirectory'] = str(pathlib.Path(str(self._directory.etc.ipaConfig.ipaHomesRootDir)) / uid)
+			attributes['homeDirectory'] = str(pathlib.Path(str(self._directory.etc.ipaConfig.ipaHomesRootDir)) / attributes['uid'])
 			
 		if 'mail' not in attributes:
-			attributes['mail'] = '{}@{}'.format(uid, self._directory.etc.ipaConfig.ipaDefaultEmailDomain)
+			attributes['mail'] = '{}@{}'.format(attributes['uid'], self._directory.etc.ipaConfig.ipaDefaultEmailDomain)
 
 		collection_dn = self._connection.build_dn(self._collection_rdn, is_relative = True)
 		if ('manager' in attributes) and (attributes['manager'].find(collection_dn) < 0):
