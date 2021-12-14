@@ -360,6 +360,7 @@ class IPADirectory:
 			raise RuntimeError("Kerberos' keytab authentication is not implemented yet.")
 		
 		srv_records = {}
+		LOGGER.debug('Querying SRV records for %s', domain_name)
 		for srv_record in dns.resolver.resolve('_ldap._tcp.{}'.format(domain_name), 'SRV'):
 			if srv_record.weight not in srv_records:
 				srv_records[srv_record.weight] = []
@@ -370,10 +371,12 @@ class IPADirectory:
 		servers = []
 		for weight in weights:
 			servers += [str(srv_record.target) for srv_record in srv_records[weight]]
+		LOGGER.debug('Got servers: %s', servers)
 		cluster = ldap3.ServerPool([ldap3.Server(server, use_ssl = True) for server in servers], ldap3.FIRST, active = 1, exhaust = True)
 		
 		base_dn = self.domain_to_dn(domain_name)
 		
+		LOGGER.debug('Connecting to FreeIPA cluster: %s')
 		self._connection = ldap3_.Connection(server = cluster, base_dn = base_dn, user = 'uid={},cn=users,cn=accounts,{}'.format(username, base_dn), password = password, **self._LDAP_CONNECTION_PARAMS)
 		
 		self._dry_run = dry_run
