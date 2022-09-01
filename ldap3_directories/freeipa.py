@@ -321,6 +321,8 @@ class IPAGroup(ldap3_.RWEntryWrapper):
 		else:
 			raise RuntimeError('Entry seems to be read-only')
 
+		return self
+
 	def __isub__(self, other):
 		'''Remove member to group
 		The only requirement is that the "other" should have an entry_dn attribute which is already a member of the group.
@@ -335,6 +337,8 @@ class IPAGroup(ldap3_.RWEntryWrapper):
 				LOGGER.info("Group %s doesn't has a member %s", self.cn, other.entry_dn)
 		else:
 			raise RuntimeError('Entry seems to be read-only')
+
+		return self
 
 
 class IPAGroups(ldap3_.EntriesCollection):
